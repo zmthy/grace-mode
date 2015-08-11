@@ -202,7 +202,8 @@ in a method or class header, or nil if no such header exists."
 
                       (and
                        ;; Indent if a symbol appears at the start of the line.
-                       (not (looking-at "\\.\\|[[:punct:]]\+ "))
+                       (or (looking-at "//[^[:punct:]]")
+                        (not (looking-at "\\.\\|[[:punct:]]\+ ")))
                        (save-excursion
                          (grace-rewind-irrelevant)
                          (or
@@ -210,13 +211,12 @@ in a method or class header, or nil if no such header exists."
                            ;; needed, so stay at baseline.
                            (= 1 (line-number-at-pos (point)))
                            ;; Or if the previous line ends with any of these:
-                           ;;     { } ( ) [ ] > " ; \w
+                           ;;     { } ( ) [ ] > " ; \w \d
                            ;; then we are at the beginning of an expression, so
                            ;; stay on the baseline.  Note that the appearance of
                            ;; '>' here means that a multiline split on that
                            ;; operator will not be indented.
-                           (looking-back (concat "[()[{}\";>]\\|]\\|"
-                                                 grace-re-ident))))))
+                           (looking-back (concat "[()[{}\";>]\\|]\\|\\w"))))))
                      baseline
 
                    ;; Otherwise, we are continuing the same expression from the
