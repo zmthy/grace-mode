@@ -242,8 +242,10 @@ in a method or class header, or nil if no such header exists."
     "method"
     "object" "outer"
     "return"
+    "self" "super"
     "type"
-    "var"))
+    "var"
+    "where"))
 
 (defconst grace-mode-symbols
   '("->"
