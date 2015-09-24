@@ -145,92 +145,121 @@ in a method or class header, or nil if no such header exists."
   (backward-up-list)
   (grace-rewind-to-beginning-of-current-statement))
 
+(defvar grace-reindent-point nil
+  "May hold the point of the last indent.  If set, then if the next indent is at
+the same point then it should be interpreted as a reindent rather than an
+indent.")
+
+(defun grace-nil-reindent-point ()
+  "Set the reindent point to nil."
+  (setq grace-reindent-point nil))
+
 (defun grace-mode-indent-line ()
   "Indent the current line as Grace code."
   (interactive)
-  (let ((indent
-         (save-excursion
-           (back-to-indentation)
-           (let* ((level (grace-paren-level))
-                  (baseline
-                   (if (= 0 level)
-                       0
-                     (save-excursion
-                       (grace-rewind-to-beginning-of-outer-statement)
-                       (+ (current-column) grace-indent-offset))))
-                  (method-decl (grace-inside-method-header)))
+  (let*
+      ((start-point (point))
+       (start-column (current-column))
+       (start-indentation (current-indentation))
+       (start-reindent grace-reindent-point)
+       (indent
+        (save-excursion
+          ;; (grace-nil-reindent-point)
+          (back-to-indentation)
+          (let* ((level (grace-paren-level))
+                 (baseline
+                  (if (= 0 level)
+                      0
+                    (save-excursion
+                      (grace-rewind-to-beginning-of-outer-statement)
+                      (+ (current-column) grace-indent-offset))))
+                 (method-decl (grace-inside-method-header)))
 
-             (cond
+            (cond
+             ;; If inside a method name declaration, align with the first name,
+             ;; unless at the beginning of an annotation list on a class, in
+             ;; which case align with the class name.
+             (method-decl
+              (let ((is (looking-at "is ")))
 
-              ;; If inside a method name declaration, align with the first name,
-              ;; unless at the beginning of an annotation list on a class, in
-              ;; which case align with the class name.
-              (method-decl
-               (let ((is (looking-at "is ")))
+                ;; Don't indent to the name if we're on the line with the
+                ;; initial keyword.
+                (if (= method-decl (point))
+                    (grace-current-indent)
+                  (save-excursion
+                    (goto-char method-decl)
+                    (when (looking-at "method ")
+                      (forward-word))
+                    (when (looking-at "class ")
+                      (if is
+                          (forward-word)
+                        (skip-chars-forward "^.")))
+                    (forward-word)
+                    (backward-word)
+                    (current-column)))))
 
-                 ;; Don't indent to the name if we're on the line with the
-                 ;; initial keyword.
-                 (if (= method-decl (point))
-                     (grace-current-indent)
+             ;; A closing brace is 1 level unindented.
+             ((looking-at "}") (- baseline grace-indent-offset))
 
-                   (save-excursion
-                     (goto-char method-decl)
-                     (when (looking-at "method ")
-                       (forward-word))
-                     (when (looking-at "class ")
-                       (if is
-                           (forward-word)
-                         (skip-chars-forward "^.")))
-                     (forward-word)
-                     (backward-word)
-                     (current-column)))))
+             ;; If we're in any other token-tree / sexp, then:
+             (t
+              (progn
+                (back-to-indentation)
 
-              ;; A closing brace is 1 level unindented.
-              ((looking-at "}") (- baseline grace-indent-offset))
+                (if (or
+                     ;; If this line begins with "{", stay on the baseline as
+                     ;; well (we are continuing an expression, but the "{"
+                     ;; should align with the beginning of the expression that
+                     ;; it is in.)
+                     (looking-at "{")
 
-              ;; If we're in any other token-tree / sexp, then:
-              (t
-               (progn
-                 (back-to-indentation)
+                     (and
+                      ;; Indent if a symbol appears at the start of the line.
+                      (or (looking-at "//[^[:punct:]]")
+                          (not (looking-at "\\.\\|[[:punct:]]\+ ")))
+                      (save-excursion
+                        (grace-rewind-irrelevant)
+                        (or
+                         ;; If we are at the first line, no indentation is
+                         ;; needed, so stay at baseline.
+                         (= 1 (line-number-at-pos (point)))
+                         ;; Or if the previous line ends with any of these:
+                         ;;     { ; :alpha: ->
+                         ;; then we are at the beginning of an expression, so
+                         ;; stay on the baseline.
+                         (looking-back (concat "[{;[:alpha:]]\\|->"))
+                         ;; Or if the previous line ends with any of these:
+                         ;;     } ) > " :digit:
+                         ;; then we are at the beginning of an expression,
+                         ;; except if the next line is a request, in which
+                         ;; case it could be a continuation of the previous
+                         ;; line.  Note that the appearance of '>' here means
+                         ;; that a multiline split on that operator may not
+                         ;; be indented.
+                         (and
+                          (looking-back (concat "[)}\">[:digit:]]"))
+                          (setq grace-reindent-point start-point)
+                          (if (and start-reindent
+                                   (= start-reindent start-point))
+                              (> start-indentation baseline)
+                            (<= start-indentation baseline)))))))
+                    baseline
 
-                 (if (or
-                      ;; If this line begins with "else" or "{", stay on the
-                      ;; baseline as well (we are continuing an expression,
-                      ;; but the "else" or "{" should align with the beginning
-                      ;; of the expression it's in.)
-                      (looking-at "{")
-
-                      (and
-                       ;; Indent if a symbol appears at the start of the line.
-                       (or (looking-at "//[^[:punct:]]")
-                        (not (looking-at "\\.\\|[[:punct:]]\+ ")))
-                       (save-excursion
-                         (grace-rewind-irrelevant)
-                         (or
-                           ;; If we are at the first line, no indentation is
-                           ;; needed, so stay at baseline.
-                           (= 1 (line-number-at-pos (point)))
-                           ;; Or if the previous line ends with any of these:
-                           ;;     { } ( ) [ ] > " ; \w \d
-                           ;; then we are at the beginning of an expression, so
-                           ;; stay on the baseline.  Note that the appearance of
-                           ;; '>' here means that a multiline split on that
-                           ;; operator will not be indented.
-                           (looking-back (concat "[()[{}\";>]\\|]\\|\\w"))))))
-                     baseline
-
-                   ;; Otherwise, we are continuing the same expression from the
-                   ;; previous line, so add one additional indent level.
-                   (+ baseline grace-indent-offset)))))))))
+                  ;; Otherwise, we are continuing the same expression from the
+                  ;; previous line, so add two additional indent levels.
+                  (+ baseline (* grace-indent-offset 2))))))))))
 
     (when indent
       ;; If we're at the beginning of the line (before or at the current
       ;; indentation), jump with the indentation change.  Otherwise, save the
       ;; excursion so that adding the indentations will leave us at the
       ;; equivalent position within the line to where we were before.
-      (if (<= (current-column) (current-indentation))
+      (if (<= start-column start-indentation)
           (indent-line-to indent)
-        (save-excursion (indent-line-to indent))))))
+        (save-excursion (indent-line-to indent)))
+
+      (if grace-reindent-point
+          (setq grace-reindent-point (point))))))
 
 ;; Font-locking definitions
 (defconst grace-mode-keywords
@@ -313,6 +342,17 @@ in a method or class header, or nil if no such header exists."
 
   ;; Indentation
   (setq-local indent-line-function 'grace-mode-indent-line)
+
+  ;; Electric indent triggers multiple indents on a newline, which isn't
+  ;; compatible with the reindenting feature.
+  (add-hook 'grace-mode-hook
+            (lambda ()
+              (set (make-local-variable 'electric-indent-functions)
+                   (list (lambda (arg) 'no-indent)))))
+
+  ;; Unset the reindent variable on any buffer change.
+  (setq-local after-change-functions
+              (cons 'grace-nil-reindent-point after-change-functions))
 
   ;; Fonts
   (setq-local font-lock-defaults '(grace-mode-font-lock))
