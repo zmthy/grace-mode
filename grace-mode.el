@@ -236,10 +236,10 @@ indent.")
                          ;; needed, so stay at baseline.
                          (= 1 (line-number-at-pos (point)))
                          ;; Or if the previous line ends with any of these:
-                         ;;     { ; :alpha: ->
+                         ;;     { ; :alpha: ' ->
                          ;; then we are at the beginning of an expression, so
                          ;; stay on the baseline.
-                         (looking-back (concat "[{;[:alpha:]]\\|->"))
+                         (looking-back (concat "[{;[:alpha:]']\\|->"))
                          ;; Or if the previous line ends with any of these:
                          ;;     } ) > " :digit:
                          ;; then we are at the beginning of an expression,
