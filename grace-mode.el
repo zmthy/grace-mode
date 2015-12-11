@@ -59,7 +59,7 @@
   :type 'integer
   :group 'grace-mode)
 
-(defun grace-paren-level ()
+(defun grace-list-level ()
   "The current level of nested braces and parentheses."
   (nth 0 (syntax-ppss)))
 
@@ -90,13 +90,15 @@ literals and comments."
 (defun grace-current-indent ()
   "The indentation amount of the first statement at the current level."
   (save-excursion
-    (if (= (grace-paren-level) 0)
+    (if (= (grace-list-level) 0)
         0
       (grace-rewind-irrelevant)
       (backward-up-list)
-      (forward-char)
-      (grace-fast-forward-irrelevant)
-      (current-column))))
+      (if (looking-at "(")
+          (grace-current-indent)
+        (forward-char)
+        (grace-fast-forward-irrelevant)
+        (current-column)))))
 
 (defun grace-rewind-to-beginning-of-current-statement-simple ()
   "Rewind to the beginning of the current statement, ignoring method headers."
@@ -104,10 +106,10 @@ literals and comments."
   (unless (save-excursion
             (grace-rewind-irrelevant)
             (looking-back "{"))
-    (let ((current-level (grace-paren-level))
+    (let ((current-level (grace-list-level))
           (current-indent (grace-current-indent)))
       (back-to-indentation)
-      (while (> (grace-paren-level) current-level)
+      (while (> (grace-list-level) current-level)
         (backward-up-list)
         (back-to-indentation))
       (while (> (current-column) current-indent)
@@ -116,21 +118,35 @@ literals and comments."
 
 (defun grace-inside-method-header ()
   "Provides the location of the method or class keyword if the current point is
-in a method or class header, or nil if no such header exists."
+in a method or class header, or nil if no such header exists.
+
+If the cursor is inside a pair of braces inside a method header, the method
+header will not be detected."
   (save-excursion
-    (grace-rewind-to-beginning-of-current-statement-simple)
+    (grace-rewind-irrelevant)
 
-    ;; Either we jump back to the keyword...
-    (if (or (looking-at "method ") (looking-at "class "))
-        (point)
-      (grace-rewind-irrelevant)
-      (unless (or (looking-back "{") (looking-back "}"))
-        (back-to-indentation)
+    (if (looking-back "}")
+        (let ((current-level (grace-list-level)))
+          (backward-char)
+          (backward-up-list)
+          (let ((header (grace-inside-method-header)))
+            (when header
+              (goto-char header)
+              (when (/= (grace-list-level) current-level)
+                header))))
 
-        ;; ... or if the indentation on the previous line is further in than
-        ;; expected, we'll check to see if jumping further back finds it.
-        (if (> (current-column) (grace-current-indent))
-            (grace-inside-method-header))))))
+      (grace-rewind-to-beginning-of-current-statement-simple)
+
+      ;; Either we jump back to the keyword...
+      (if (or (looking-at "method ") (looking-at "class "))
+          (point)
+        (unless (or (looking-back "{") (looking-back "}"))
+          (back-to-indentation)
+
+          ;; ... or if the indentation on the previous line is further in than
+          ;; expected, we'll check to see if jumping further back finds it.
+          (if (> (current-column) (grace-current-indent))
+              (grace-inside-method-header)))))))
 
 (defun grace-rewind-to-beginning-of-current-statement ()
   "Rewind to the beginning of the current statement."
@@ -166,7 +182,7 @@ indent.")
         (save-excursion
           ;; (grace-nil-reindent-point)
           (back-to-indentation)
-          (let* ((level (grace-paren-level))
+          (let* ((level (grace-list-level))
                  (baseline
                   (if (= 0 level)
                       0
