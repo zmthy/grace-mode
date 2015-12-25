@@ -258,8 +258,8 @@ indent.")
                     baseline
 
                   ;; Otherwise, we are continuing the same expression from the
-                  ;; previous line, so add two additional indent levels.
-                  (+ baseline (* grace-indent-offset 2))))))))))
+                  ;; previous line, so add an additional indent levels.
+                  (+ baseline grace-indent-offset)))))))))
 
     (when indent
       ;; If we're at the beginning of the line (before or at the current
