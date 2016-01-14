@@ -59,6 +59,11 @@
   :type 'integer
   :group 'grace-mode)
 
+(defun grace-looking-back (regexp &optional limit)
+  "Like looking-back, but the limit is relative from the current point.  If
+limit is nil, it defaults to 1."
+  (looking-back regexp (- (point) (or limit 1))))
+
 (defun grace-list-level ()
   "The current level of nested braces and parentheses."
   (nth 0 (syntax-ppss)))
@@ -105,7 +110,7 @@ literals and comments."
   ;; Avoid jumping around if we've just opened a brace.
   (unless (save-excursion
             (grace-rewind-irrelevant)
-            (looking-back "{"))
+            (grace-looking-back "{"))
     (let ((current-level (grace-list-level))
           (current-indent (grace-current-indent)))
       (back-to-indentation)
@@ -125,7 +130,7 @@ header will not be detected."
   (save-excursion
     (grace-rewind-irrelevant)
 
-    (if (looking-back "}")
+    (if (grace-looking-back "}")
         (let ((current-level (grace-list-level)))
           (backward-char)
           (backward-up-list)
@@ -140,7 +145,7 @@ header will not be detected."
       ;; Either we jump back to the keyword...
       (if (or (looking-at "method ") (looking-at "class "))
           (point)
-        (unless (or (looking-back "{") (looking-back "}"))
+        (unless (grace-looking-back "{\\|}")
           (back-to-indentation)
 
           ;; ... or if the indentation on the previous line is further in than
@@ -239,7 +244,7 @@ indent.")
                          ;;     { ; :alpha: ' ->
                          ;; then we are at the beginning of an expression, so
                          ;; stay on the baseline.
-                         (looking-back (concat "[{;[:alpha:]']\\|->"))
+                         (grace-looking-back "[{;[:alpha:]']\\|->" 2)
                          ;; Or if the previous line ends with any of these:
                          ;;     } ) > " :digit:
                          ;; then we are at the beginning of an expression,
@@ -249,7 +254,7 @@ indent.")
                          ;; that a multiline split on that operator may not
                          ;; be indented.
                          (and
-                          (looking-back (concat "[)}\">[:digit:]]"))
+                          (grace-looking-back "[)}\">[:digit:]]")
                           (setq grace-reindent-point start-point)
                           (if (and start-reindent
                                    (= start-reindent start-point))
