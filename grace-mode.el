@@ -280,9 +280,10 @@ indent.")
 
 ;; Font-locking definitions
 (defconst grace-mode-keywords
-  '("as"
+  '("alias" "as"
     "class"
     "def" "dialect"
+    "exclude"
     "import" "inherit" "is"
     "method"
     "object" "outer"
